@@ -48,6 +48,9 @@ class DrawingBoard extends StatefulWidget {
     required this.penType,
     required this.baseThickness,
     required this.color,
+
+    required this.showGrid, // 이 줄을 추가합니다
+    required this.showGridPoints, // 이 줄을 추가합니다
   });
 
   final DrawingController controller;
@@ -55,11 +58,17 @@ class DrawingBoard extends StatefulWidget {
   final double baseThickness;
   final Color color;
 
+  final bool showGrid; // 이 줄을 추가합니다
+  final bool showGridPoints; // 이 줄을 추가합니다
+
   @override
   State<DrawingBoard> createState() => _DrawingBoardState();
 }
 
 class _DrawingBoardState extends State<DrawingBoard> {
+  // _DrawingBoardState 클래스 내부에 추가
+  final Map<int, Offset> _lastBuzzIntersection = <int, Offset>{};
+  static const double _intersectionThreshold = 10.0;
   final List<Stroke> _strokes = <Stroke>[];
   final List<Stroke> _redos = <Stroke>[];
   final Map<int, Stroke> _active = <int, Stroke>{};
@@ -89,7 +98,7 @@ class _DrawingBoardState extends State<DrawingBoard> {
     _player.dispose();
     super.dispose();
   }
-
+/*
   void _handleClear() {
     setState(() {
       _strokes.clear();
@@ -101,6 +110,18 @@ class _DrawingBoardState extends State<DrawingBoard> {
     _updateHistory();
   }
 
+ */
+  void _handleClear() {
+    setState(() {
+      _strokes.clear();
+      _active.clear();
+      _redos.clear();
+      _edgeBuzzed.clear();
+      _lastCell.clear();
+      _lastBuzzIntersection.clear(); // 이 줄 추가
+    });
+    _updateHistory();
+  }
   void _handleUndo() {
     if (_strokes.isEmpty) return;
     setState(() {
@@ -203,7 +224,7 @@ class _DrawingBoardState extends State<DrawingBoard> {
       _active[e.pointer] = stroke;
     });
   }
-
+/*
   void _onPointerMove(PointerMoveEvent e) {
     final stroke = _active[e.pointer];
     if (stroke == null) return;
@@ -242,7 +263,55 @@ class _DrawingBoardState extends State<DrawingBoard> {
       setState(() {});
     }
   }
+*/
+  void _onPointerMove(PointerMoveEvent e) {
+    final stroke = _active[e.pointer];
+    if (stroke == null) return;
 
+    final last = stroke.points.isNotEmpty ? stroke.points.last : null;
+    final current = e.localPosition;
+
+    // 변경된 로직: 그리드 교차점 진동
+    final intersectionX = (_gridGap * (current.dx / _gridGap).round());
+    final intersectionY = (_gridGap * (current.dy / _gridGap).round());
+    final currentIntersection = Offset(intersectionX, intersectionY);
+
+    final distanceToIntersection = (current - currentIntersection).distance;
+
+    if (distanceToIntersection < _intersectionThreshold) {
+      if (_lastBuzzIntersection[e.pointer] != currentIntersection) {
+        _gridTickFeedback();
+        _lastBuzzIntersection[e.pointer] = currentIntersection;
+      }
+    } else {
+      _lastBuzzIntersection.remove(e.pointer);
+    }
+
+    // 기존 가장자리 햅틱 피드백 로직
+    final wasInside = last == null ? _isInside(current) : _isInside(last);
+    final isInside = _isInside(current);
+    if (wasInside && !isInside && (_edgeBuzzed[e.pointer] != true)) {
+      _edgeBuzzed[e.pointer] = true;
+      _boundaryFeedback();
+    } else if (isInside) {
+      _edgeBuzzed[e.pointer] = false;
+    }
+
+    // 기존 선 그리기 로직
+    if (last == null || (last - current).distance >= _minDistance) {
+      double segWidth = stroke.baseWidth;
+      if (stroke.penType == PenType.fountain) {
+        final p = e.pressure;
+        segWidth = math.max(0.5, stroke.baseWidth * (p.clamp(0.5, 2.0)));
+      }
+      stroke.points.add(current);
+      if (stroke.points.length > 1) {
+        stroke.segmentWidths.add(segWidth);
+      }
+      setState(() {});
+    }
+  }
+  /*
   void _onPointerUp(PointerUpEvent e) {
     final stroke = _active.remove(e.pointer);
     if (stroke == null) return;
@@ -261,6 +330,25 @@ class _DrawingBoardState extends State<DrawingBoard> {
     setState(() {});
   }
 
+   */
+  void _onPointerUp(PointerUpEvent e) {
+    final stroke = _active.remove(e.pointer);
+    if (stroke == null) return;
+    setState(() {
+      _strokes.add(stroke);
+    });
+    _edgeBuzzed.remove(e.pointer);
+    _lastCell.remove(e.pointer);
+    _lastBuzzIntersection.remove(e.pointer); // 이 줄 추가
+    _updateHistory();
+  }
+  void _onPointerCancel(PointerCancelEvent e) {
+    _active.remove(e.pointer);
+    _edgeBuzzed.remove(e.pointer);
+    _lastCell.remove(e.pointer);
+    _lastBuzzIntersection.remove(e.pointer); // 이 줄 추가
+    setState(() {});
+  }
   @override
   Widget build(BuildContext context) {
     return Listener(
@@ -274,8 +362,10 @@ class _DrawingBoardState extends State<DrawingBoard> {
           painter: _BoardPainter(
             strokes: _strokes,
             active: _active.values.toList(growable: false),
-            bgColor: Theme.of(context).colorScheme.surfaceVariant,
+            bgColor: Theme.of(context).colorScheme.surfaceContainerHighest,
             gridGap: _gridGap,
+            showGrid: widget.showGrid,
+            showGridPoints: widget.showGridPoints,
           ),
         ),
       ),
@@ -283,18 +373,24 @@ class _DrawingBoardState extends State<DrawingBoard> {
   }
 }
 
+// _BoardPainter 클래스 전체를 아래 코드로 교체하세요.
+
 class _BoardPainter extends CustomPainter {
   _BoardPainter({
     required this.strokes,
     required this.active,
     required this.bgColor,
     required this.gridGap,
+    required this.showGrid, // 추가
+    required this.showGridPoints, // 추가
   });
 
   final List<Stroke> strokes;
   final List<Stroke> active;
   final Color bgColor;
   final double gridGap;
+  final bool showGrid; // 추가
+  final bool showGridPoints; // 추가
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -303,8 +399,15 @@ class _BoardPainter extends CustomPainter {
       ..color = bgColor;
     canvas.drawRect(Offset.zero & size, bg);
 
-    _drawLightGrid(canvas, size);
+    // ⭐️⭐️⭐️ UI 상태에 따라 그리드 선과 점을 그리는 로직 ⭐️⭐️⭐️
+    if (showGrid) {
+      _drawLightGrid(canvas, size);
+    }
+    if (showGridPoints) {
+      _drawGridPoints(canvas, size);
+    }
 
+    // 사용자가 그린 선은 항상 그립니다.
     for (final s in strokes) {
       _drawStroke(canvas, s);
     }
@@ -326,7 +429,26 @@ class _BoardPainter extends CustomPainter {
     }
   }
 
+  void _drawGridPoints(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.5)
+      ..strokeWidth = 5.0
+      ..strokeCap = StrokeCap.round;
+
+    final gap = gridGap;
+    final List<Offset> points = [];
+
+    for (double x = 0; x <= size.width; x += gap) {
+      for (double y = 0; y <= size.height; y += gap) {
+        points.add(Offset(x, y));
+      }
+    }
+
+    canvas.drawPoints(PointMode.points, points, paint);
+  }
+
   void _drawStroke(Canvas canvas, Stroke s) {
+    // 이 메서드는 기존 코드와 동일합니다.
     if (s.points.length < 2) {
       final p = Paint()
         ..color = s.color

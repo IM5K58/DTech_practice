@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'drawing_board.dart';
 import 'models/stroke.dart';
 import 'widgets/pen_palette.dart';
 
 void main() {
   runApp(const DrawingApp());
+}
+
+// 캔버스 레이어 상태를 정의하는 Enum
+enum CanvasLayer {
+  gridAndPoints, // 그리드 선과 점 모두 표시
+  pointsOnly,     // 점만 표시
+  nothing,        // 아무것도 표시 안 함
 }
 
 class DrawingApp extends StatelessWidget {
@@ -40,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
   double _thickness = 6.0;
   Color _color = Colors.black;
 
+  // 캔버스 레이어 상태
+  CanvasLayer _canvasLayer = CanvasLayer.gridAndPoints;
+
   void _openPenPalette() async {
     final result = await showModalBottomSheet<PenPaletteResult>(
       context: context,
@@ -67,6 +76,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 현재 레이어 상태에 따라 `showGrid`와 `showGridPoints` 값을 결정합니다.
+    final bool showGrid = _canvasLayer == CanvasLayer.gridAndPoints;
+    final bool showGridPoints = _canvasLayer == CanvasLayer.gridAndPoints || _canvasLayer == CanvasLayer.pointsOnly;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('SoriCanvas'),
@@ -105,12 +118,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          // 화면을 꽉 채우지 않는 4:3 직사각형
           const padding = 16.0;
           final maxWidth = constraints.maxWidth - padding * 2;
           final maxHeight = constraints.maxHeight - padding * 2 - 12;
 
-          // 4:3 비율 박스 크기 계산
           double width = maxWidth;
           double height = width * 3 / 4;
           if (height > maxHeight) {
@@ -141,18 +152,63 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: ColoredBox(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: DrawingBoard(
                     controller: drawingController,
                     penType: _penType,
                     baseThickness: _thickness,
                     color: _color,
+                    showGrid: showGrid,
+                    showGridPoints: showGridPoints,
                   ),
                 ),
               ),
             ),
           );
         },
+      ),
+      bottomNavigationBar: BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _canvasLayer = CanvasLayer.gridAndPoints;
+                });
+              },
+              icon: Icon(
+                Icons.grid_on,
+                color: _canvasLayer == CanvasLayer.gridAndPoints ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              tooltip: '그리드 선과 점 모두 보기',
+            ),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _canvasLayer = CanvasLayer.pointsOnly;
+                });
+              },
+              icon: Icon(
+                Icons.circle_outlined,
+                color: _canvasLayer == CanvasLayer.pointsOnly ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              tooltip: '점만 보기',
+            ),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _canvasLayer = CanvasLayer.nothing;
+                });
+              },
+              icon: Icon(
+                Icons.visibility_off,
+                color: _canvasLayer == CanvasLayer.nothing ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              tooltip: '아무것도 안 보기',
+            ),
+          ],
+        ),
       ),
     );
   }
