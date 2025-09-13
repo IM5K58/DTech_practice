@@ -1,3 +1,5 @@
+// main.dart 파일 전체를 아래 코드로 교체하세요.
+
 import 'package:flutter/material.dart';
 import 'drawing_board.dart';
 import 'models/stroke.dart';
@@ -118,16 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          const padding = 16.0;
+          // 캔버스 주변의 여백을 줄입니다.
+          const padding = 4.0;
           final maxWidth = constraints.maxWidth - padding * 2;
-          final maxHeight = constraints.maxHeight - padding * 2 - 12;
+          final maxHeight = constraints.maxHeight - padding * 2;
 
-          double width = maxWidth;
-          double height = width * 3 / 4;
-          if (height > maxHeight) {
-            height = maxHeight;
-            width = height * 4 / 3;
-          }
+          final double width = maxWidth;
+          final double height = maxHeight;
 
           return Center(
             child: Container(
